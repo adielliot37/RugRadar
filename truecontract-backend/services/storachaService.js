@@ -65,10 +65,13 @@ const uploadAnalysis = async (fileName, data) => {
             throw new Error(`MCP upload error: ${payload.error}`);
         }
 
+        console.log('Payload structure:', JSON.stringify(payload, null, 2));
+
         let fileCid = payload?.files?.[fileName]?.['/'];
 
         if (!fileCid && payload?.files) {
             const keys = Object.keys(payload.files);
+            console.log('Available file keys:', keys);
 
             if (keys.length > 0) {
                 fileCid = payload.files[keys[0]]?.['/'];
@@ -87,23 +90,25 @@ const uploadAnalysis = async (fileName, data) => {
             }
         }
 
-        if (!fileCid) {
-            const keys = payload?.files ? Object.keys(payload.files) : [];
+        const rootCid = payload?.root?.['/'] || payload?.cid?.['/'];
+
+        if (!rootCid && !fileCid) {
+            console.error('Full payload:', JSON.stringify(payload, null, 2));
             throw new Error(
-                `MCP upload: file CID not found for "${fileName}". Available keys: ${keys.join(', ')}`
+                `MCP upload: Could not extract CID from response. Available keys: ${Object.keys(payload).join(', ')}`
             );
         }
 
-        const rootCid = payload?.root?.['/'];
+        const finalCid = fileCid || rootCid;
 
-        console.log('Storacha upload successful.');
-        console.log(`File CID: ${fileCid}`);
+        console.log('✅ Storacha upload successful.');
+        console.log(`File CID: ${finalCid}`);
         console.log(`Root CID: ${rootCid}`);
 
         return {
-            cid: fileCid,
-            rootCid: rootCid,
-            path: `${fileCid}/${fileName}`
+            cid: finalCid,
+            rootCid: rootCid || finalCid,
+            path: `${finalCid}/${fileName}`
         };
     } catch (error) {
         console.error('Error uploading to Storacha:', error.message);

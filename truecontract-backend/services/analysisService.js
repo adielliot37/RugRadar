@@ -1,6 +1,21 @@
 const { getContractData, getContractTransactions, getContractBalance } = require('./blockchainService');
 const { analyzeContractWithAI, analyzeContractABI, performStaticAnalysis } = require('./aiService');
 
+const getOnChainData = async (contractAddress) => {
+    console.log(`Fetching fresh on-chain data for ${contractAddress}...`);
+
+    const balance = await getContractBalance(contractAddress);
+    const transactions = await getContractTransactions(contractAddress, 10000);
+    const transactionAnalysis = analyzeTransactionPatterns(transactions);
+
+    return {
+        balance,
+        totalTransactions: transactions.length,
+        transactionAnalysis,
+        lastUpdated: new Date().toISOString()
+    };
+};
+
 const performComprehensiveAnalysis = async (contractAddress) => {
     console.log(`Starting comprehensive analysis for ${contractAddress}...`);
 
@@ -28,8 +43,23 @@ const performComprehensiveAnalysis = async (contractAddress) => {
         transactionAnalysis
     );
 
+    const rugPullScore = calculateRugPullScore(
+        aiAnalysis,
+        staticAnalysis,
+        abiAnalysis,
+        transactionAnalysis
+    );
+
+    const onChainData = {
+        balance,
+        totalTransactions: transactions.length,
+        transactionAnalysis,
+        lastUpdated: new Date().toISOString()
+    };
+
     return {
         contractAddress,
+        rugPullScore,
         contractMetadata: {
             name: contractData.contractName,
             compiler: contractData.compilerVersion,
@@ -41,16 +71,15 @@ const performComprehensiveAnalysis = async (contractAddress) => {
             implementationAddress: contractData.implementation,
             createdBy: contractData.creationInfo?.creator,
             creationTx: contractData.creationInfo?.txHash,
-            balance: balance,
             linesOfCode: staticAnalysis.linesOfCode,
             solidityVersion: staticAnalysis.solidityVersion
         },
         aiAnalysis: {
             ...aiAnalysis,
             staticAnalysis,
-            abiAnalysis,
-            transactionAnalysis
+            abiAnalysis
         },
+        onChainData,
         riskAssessment,
         lastAnalyzed: new Date().toISOString()
     };
@@ -122,6 +151,63 @@ const analyzeTransactionPatterns = (transactions) => {
         recentActivity: recentTxs.length > 0,
         lastInteraction: transactions[0] ? new Date(parseInt(transactions[0].timeStamp) * 1000).toISOString() : null
     };
+};
+
+const calculateRugPullScore = (aiAnalysis, staticAnalysis, abiAnalysis, transactionAnalysis) => {
+    let rugScore = 0;
+
+    if (aiAnalysis.isWellKnownProtocol) {
+        console.log(`✅ AI detected well-known protocol: ${aiAnalysis.protocolName}`);
+        return 5;
+    }
+
+    const rugPullIndicators = [
+        'Centralization Risks',
+        'Unprotected Functions',
+        'Access Control Issues',
+        'Unchecked External Calls'
+    ];
+
+    const rugVulns = aiAnalysis.vulnerabilities?.filter(v =>
+        v.detected && rugPullIndicators.some(indicator => v.name.includes(indicator))
+    ) || [];
+
+    rugScore += rugVulns.filter(v => v.severity === 'critical').length * 30;
+    rugScore += rugVulns.filter(v => v.severity === 'high').length * 20;
+    rugScore += rugVulns.filter(v => v.severity === 'medium').length * 10;
+
+    if (abiAnalysis.hasOwnership && !abiAnalysis.hasPause) {
+        rugScore += 10;
+    }
+
+    if (abiAnalysis.dangerousFunctions?.some(fn =>
+        fn.toLowerCase().includes('withdraw') ||
+        fn.toLowerCase().includes('selfdestruct')
+    )) {
+        rugScore += 15;
+    }
+
+    if (staticAnalysis.hasSelfDestruct) {
+        rugScore += 25;
+    }
+
+    if (transactionAnalysis.uniqueInteractors < 10 && transactionAnalysis.totalTransactions > 50) {
+        rugScore += 20;
+    }
+
+    if (transactionAnalysis.uniqueInteractors > 1000) {
+        rugScore = Math.max(0, rugScore - 20);
+    }
+
+    if (transactionAnalysis.totalTransactions > 10000) {
+        rugScore = Math.max(0, rugScore - 15);
+    }
+
+    if (transactionAnalysis.failureRate > 30) {
+        rugScore += 10;
+    }
+
+    return Math.min(100, rugScore);
 };
 
 const calculateRiskAssessment = (aiAnalysis, staticAnalysis, abiAnalysis, transactionAnalysis) => {
@@ -237,6 +323,8 @@ const generateRiskSummary = (riskLevel, criticalVulns, highVulns, totalRisks) =>
 
 module.exports = {
     performComprehensiveAnalysis,
+    getOnChainData,
     analyzeTransactionPatterns,
-    calculateRiskAssessment
+    calculateRiskAssessment,
+    calculateRugPullScore
 };

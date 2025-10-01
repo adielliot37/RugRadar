@@ -331,10 +331,69 @@
   gap: 1rem;
 }
 
-.contract-type {
-  font-size: 1.5rem;
+.contract-type-badges {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-bottom: 1.5rem;
+}
+
+.contract-type-badge {
+  padding: 0.5rem 1rem;
+  background: linear-gradient(135deg, rgba(14, 165, 233, 0.2), rgba(16, 185, 129, 0.2));
+  border: 1px solid rgba(14, 165, 233, 0.4);
+  border-radius: 50px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #0ea5e9;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.cached-badge {
+  padding: 0.5rem 1rem;
+  background: linear-gradient(135deg, rgba(234, 179, 8, 0.2), rgba(245, 158, 11, 0.2));
+  border: 1px solid rgba(234, 179, 8, 0.4);
+  border-radius: 50px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #eab308;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.on-chain-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1rem;
+  margin: 1.5rem 0;
+  padding: 1.5rem;
+  background: rgba(15, 23, 42, 0.4);
+  border-radius: 1rem;
+  border: 1px solid rgba(71, 85, 105, 0.3);
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  text-align: center;
+}
+
+.stat-label {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+}
+
+.stat-value {
+  font-size: 1.25rem;
   font-weight: 700;
-  color: #f1f5f9;
+  color: #0ea5e9;
+  text-transform: capitalize;
 }
 
 .contract-address {
@@ -858,5 +917,105 @@
   .vulnerabilities-card,
   .reviews-card {
     padding: 1.5rem;
+  }
+}
+
+.rug-meter-container {
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(24px);
+  border: 2px solid rgba(239, 68, 68, 0.3);
+  border-radius: 1.5rem;
+  padding: 2rem;
+  box-shadow: 0 8px 32px rgba(239, 68, 68, 0.2);
+  margin-bottom: 2rem;
+  text-align: center;
+}
+
+.rug-meter-title {
+  font-size: 1.75rem;
+  font-weight: 700;
+  margin-bottom: 2rem;
+  color: #f1f5f9;
+  text-align: center;
+}
+
+.speedometer {
+  position: relative;
+  max-width: 400px;
+  margin: 0 auto 2rem;
+  padding: 1rem;
+}
+
+.speedometer-svg {
+  width: 100%;
+  height: auto;
+  filter: drop-shadow(0 4px 24px rgba(0, 0, 0, 0.3));
+}
+
+.rug-score-label-container {
+  text-align: center;
+  margin-top: 1rem;
+}
+
+.rug-score-label {
+  font-size: 1rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  text-shadow: 0 0 10px currentColor;
+}
+
+.rug-meter-legend {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid rgba(71, 85, 105, 0.3);
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  color: #cbd5e1;
+}
+
+.legend-color {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  box-shadow: 0 2px 8px currentColor;
+}
+
+@media (max-width: 768px) {
+  .rug-meter-container {
+    padding: 1.5rem;
+  }
+
+  .rug-meter-title {
+    font-size: 1.5rem;
+  }
+
+  .speedometer {
+    max-width: 300px;
+  }
+
+  .rug-score-number {
+    font-size: 2rem;
+  }
+
+  .rug-score-label {
+    font-size: 0.75rem;
+  }
+
+  .rug-meter-legend {
+    gap: 0.75rem;
+  }
+
+  .legend-item {
+    font-size: 0.75rem;
   }
 }

@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { performComprehensiveAnalysis } = require('../services/analysisService');
+const { performComprehensiveAnalysis, getOnChainData } = require('../services/analysisService');
 const { uploadAnalysis, retrieveAnalysis } = require('../services/storachaService');
 
 const contractIndex = {};
@@ -17,18 +17,31 @@ router.post('/', async (req, res) => {
 
     try {
         const existingCid = contractIndex[indexKey];
+        let staticAuditData = null;
+
         if (existingCid && !forceRefresh) {
             const filepath = `${existingCid}/${indexKey}.json`;
-            const existingData = await retrieveAnalysis(filepath);
-            if (existingData) {
-                console.log(`Serving cached analysis for ${contractAddress} from CID ${existingCid}`);
-                existingData.cached = true;
-                existingData.cacheTimestamp = existingData.lastAnalyzed;
-                return res.json(existingData);
+            staticAuditData = await retrieveAnalysis(filepath);
+
+            if (staticAuditData) {
+                console.log(`✅ Found cached audit for ${contractAddress}. Refreshing on-chain data...`);
+
+                const freshOnChainData = await getOnChainData(contractAddress);
+
+                const combinedData = {
+                    ...staticAuditData,
+                    onChainData: freshOnChainData,
+                    rugPullScore: staticAuditData.rugPullScore,
+                    cached: true,
+                    cacheTimestamp: staticAuditData.lastAnalyzed,
+                    lastOnChainUpdate: new Date().toISOString()
+                };
+
+                return res.json(combinedData);
             }
         }
 
-        console.log(`Performing comprehensive analysis for ${contractAddress}...`);
+        console.log(`🔍 Performing full analysis for ${contractAddress}...`);
         const analysisResult = await performComprehensiveAnalysis(contractAddress);
 
         const analysisData = {
@@ -37,17 +50,23 @@ router.post('/', async (req, res) => {
             contractMetadata: analysisResult.contractMetadata,
             aiAnalysis: analysisResult.aiAnalysis,
             riskAssessment: analysisResult.riskAssessment,
+            rugPullScore: analysisResult.rugPullScore,
+            onChainData: analysisResult.onChainData,
             userReviews: [],
             lastAnalyzed: analysisResult.lastAnalyzed,
+            lastOnChainUpdate: analysisResult.lastAnalyzed,
             cached: false
         };
 
-        const fileName = `${indexKey}.json`;
-        const uploadResult = await uploadAnalysis(fileName, analysisData);
+        try {
+            const fileName = `${indexKey}.json`;
+            const uploadResult = await uploadAnalysis(fileName, analysisData);
+            contractIndex[indexKey] = uploadResult.cid;
+            console.log(`✅ Analysis complete. Stored with CID: ${uploadResult.cid}`);
+        } catch (uploadError) {
+            console.warn('⚠️ Storacha upload failed, continuing without caching:', uploadError.message);
+        }
 
-        contractIndex[indexKey] = uploadResult.cid;
-
-        console.log(`Analysis complete. Stored with CID: ${uploadResult.cid}`);
         res.status(201).json(analysisData);
 
     } catch (error) {

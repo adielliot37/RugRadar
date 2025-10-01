@@ -28,6 +28,137 @@ const StarRating = ({ rating, setRating }) => {
     );
 };
 
+const RugMeter = ({ rugScore }) => {
+    const score = Math.min(100, Math.max(0, rugScore));
+    const rotation = (score / 100) * 180 - 90;
+
+    const getRugLevel = (score) => {
+        if (score >= 80) return { label: 'EXTREME DANGER', color: '#dc2626', emoji: '🚨' };
+        if (score >= 60) return { label: 'HIGH RISK', color: '#ef4444', emoji: '⚠️' };
+        if (score >= 40) return { label: 'MODERATE RISK', color: '#f97316', emoji: '⚡' };
+        if (score >= 20) return { label: 'LOW RISK', color: '#eab308', emoji: '⚠️' };
+        return { label: 'MINIMAL RISK', color: '#22c55e', emoji: '✓' };
+    };
+
+    const level = getRugLevel(score);
+
+    return (
+        <div className="rug-meter-container">
+            <h3 className="rug-meter-title">
+                <span style={{color: '#ef4444'}}>Rug</span> Pull Risk Meter
+            </h3>
+            <div className="speedometer">
+                <svg viewBox="0 0 200 140" className="speedometer-svg">
+                    <defs>
+                        <linearGradient id="gaugeGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                            <stop offset="0%" style={{stopColor: '#22c55e', stopOpacity: 1}} />
+                            <stop offset="25%" style={{stopColor: '#eab308', stopOpacity: 1}} />
+                            <stop offset="50%" style={{stopColor: '#f97316', stopOpacity: 1}} />
+                            <stop offset="75%" style={{stopColor: '#ef4444', stopOpacity: 1}} />
+                            <stop offset="100%" style={{stopColor: '#dc2626', stopOpacity: 1}} />
+                        </linearGradient>
+                    </defs>
+
+                    <path
+                        d="M 20 100 A 80 80 0 0 1 180 100"
+                        fill="none"
+                        stroke="url(#gaugeGradient)"
+                        strokeWidth="20"
+                        strokeLinecap="round"
+                    />
+
+                    <path
+                        d="M 20 100 A 80 80 0 0 1 180 100"
+                        fill="none"
+                        stroke="rgba(255,255,255,0.1)"
+                        strokeWidth="22"
+                        strokeLinecap="round"
+                    />
+
+                    {[0, 20, 40, 60, 80, 100].map((tick) => {
+                        const angle = (tick / 100) * 180 - 90;
+                        const radians = (angle * Math.PI) / 180;
+                        const x1 = 100 + 70 * Math.cos(radians);
+                        const y1 = 100 + 70 * Math.sin(radians);
+                        const x2 = 100 + 85 * Math.cos(radians);
+                        const y2 = 100 + 85 * Math.sin(radians);
+                        return (
+                            <line
+                                key={tick}
+                                x1={x1}
+                                y1={y1}
+                                x2={x2}
+                                y2={y2}
+                                stroke="rgba(255,255,255,0.3)"
+                                strokeWidth="2"
+                            />
+                        );
+                    })}
+
+                    <line
+                        x1="100"
+                        y1="100"
+                        x2="100"
+                        y2="35"
+                        stroke={level.color}
+                        strokeWidth="3"
+                        strokeLinecap="round"
+                        style={{
+                            transformOrigin: '100px 100px',
+                            transform: `rotate(${rotation}deg)`,
+                            transition: 'transform 1s ease-out'
+                        }}
+                    />
+
+                    <circle cx="100" cy="100" r="8" fill={level.color} />
+                    <circle cx="100" cy="100" r="4" fill="#1f2937" />
+
+                    <text
+                        x="100"
+                        y="132"
+                        textAnchor="middle"
+                        dominantBaseline="middle"
+                        fill={level.color}
+                        fontSize="36"
+                        fontWeight="900"
+                        fontFamily="Inter, sans-serif"
+                    >
+                        {score}
+                    </text>
+                </svg>
+
+                <div className="rug-score-label-container">
+                    <div className="rug-score-label" style={{color: level.color}}>
+                        {level.emoji} {level.label}
+                    </div>
+                </div>
+            </div>
+            <div className="rug-meter-legend">
+                <div className="legend-item">
+                    <span className="legend-color" style={{background: '#22c55e'}}></span>
+                    <span>0-20 Safe</span>
+                </div>
+                <div className="legend-item">
+                    <span className="legend-color" style={{background: '#eab308'}}></span>
+                    <span>20-40 Caution</span>
+                </div>
+                <div className="legend-item">
+                    <span className="legend-color" style={{background: '#f97316'}}></span>
+                    <span>40-60 Warning</span>
+                </div>
+                <div className="legend-item">
+                    <span className="legend-color" style={{background: '#ef4444'}}></span>
+                    <span>60-80 Danger</span>
+                </div>
+                <div className="legend-item">
+                    <span className="legend-color" style={{background: '#dc2626'}}></span>
+                    <span>80-100 Critical</span>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 
 
 function App() {
@@ -174,15 +305,48 @@ function App() {
 
                 {analysisResult && (
                     <div className="results-section">
+                        <RugMeter rugScore={analysisResult.rugPullScore || analysisResult.riskAssessment?.overallRiskScore || 0} />
+
                         <div className="summary-card">
+                            <div className="contract-type-badges">
+                                <div className="contract-type-badge">
+                                    📋 {analysisResult.aiAnalysis.contractType}
+                                </div>
+                                {analysisResult.cached && (
+                                    <div className="cached-badge">
+                                        ⚡ Cached Audit
+                                    </div>
+                                )}
+                            </div>
+
                             <div className={`score-badge ${getScoreClass(analysisResult.aiAnalysis.securityScore)}`}>
                                 <span className="score-number">{analysisResult.aiAnalysis.securityScore}</span>
                                 <span className="score-label">Security Score</span>
                             </div>
 
                             <div className="contract-details">
-                                <h2 className="contract-type">{analysisResult.aiAnalysis.contractType}</h2>
                                 <p className="contract-address">{analysisResult.contractAddress}</p>
+
+                                {analysisResult.onChainData && (
+                                    <div className="on-chain-stats">
+                                        <div className="stat-item">
+                                            <span className="stat-label">💰 Balance</span>
+                                            <span className="stat-value">{parseFloat(analysisResult.onChainData.balance).toFixed(4)} ETH</span>
+                                        </div>
+                                        <div className="stat-item">
+                                            <span className="stat-label">📊 Total Txns</span>
+                                            <span className="stat-value">{analysisResult.onChainData.totalTransactions}</span>
+                                        </div>
+                                        <div className="stat-item">
+                                            <span className="stat-label">👥 Unique Users</span>
+                                            <span className="stat-value">{analysisResult.onChainData.transactionAnalysis?.uniqueInteractors || 0}</span>
+                                        </div>
+                                        <div className="stat-item">
+                                            <span className="stat-label">📈 Activity</span>
+                                            <span className="stat-value">{analysisResult.onChainData.transactionAnalysis?.activity || 'Unknown'}</span>
+                                        </div>
+                                    </div>
+                                )}
 
                                 <div className="summary-box">
                                     <h3>Summary</h3>

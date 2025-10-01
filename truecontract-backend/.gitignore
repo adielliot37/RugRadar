@@ -110,7 +110,7 @@ web_modules/
 # Yarn Integrity file
 .yarn-integrity
 
-# dotenv environment variable files
+# dotd environment variable files
 .env
 .env.development.local
 .env.test.local

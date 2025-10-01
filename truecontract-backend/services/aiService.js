@@ -14,12 +14,16 @@ const analyzeContractWithAI = async (contractData) => {
         - Is Proxy: ${metadata.proxy ? 'Yes' : 'No'}
         - License: ${metadata.licenseType || 'Unknown'}
 
+        IMPORTANT: Identify if this is a well-known, legitimate protocol (like USDC, WETH, Uniswap, Aave, etc.) based on the contract code patterns, name, and implementation. These should have very low risk scores.
+
         Provide your response as a single, minified JSON object without any markdown formatting.
 
         The JSON object must have this exact structure:
         {
           "summary": "A detailed 2-3 sentence summary of the contract's purpose and key functionality.",
-          "contractType": "Precise type: ERC20, ERC721, ERC1155, NFT Marketplace, DEX, Lending Protocol, Staking, Governance, DAO, Multisig, Proxy, Bridge, Oracle, or Other.",
+          "contractType": "Precise type with token name if applicable: 'USDC Token (ERC20)', 'WETH Token', 'Uniswap V3 Pool', 'ERC721 NFT', 'Proxy Contract', 'DEX Router', etc. Be specific with well-known protocols.",
+          "isWellKnownProtocol": true/false,
+          "protocolName": "If well-known: USDC, Uniswap, Aave, etc. Otherwise: null",
           "securityScore": "An integer from 0 (critical risk) to 100 (extremely safe), based on all vulnerability findings.",
           "complexityScore": "An integer from 0 (simple) to 100 (very complex), based on code complexity.",
           "gasOptimization": "A score from 0 (poor) to 100 (excellent) based on gas efficiency patterns.",

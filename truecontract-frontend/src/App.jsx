@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import './App.css';
 
 
@@ -169,6 +169,23 @@ function App() {
     const [analysisResult, setAnalysisResult] = useState(null);
     const [reviewRating, setReviewRating] = useState(0);
     const [reviewComment, setReviewComment] = useState('');
+    const [isDarkTheme, setIsDarkTheme] = useState(false);
+
+    useEffect(() => {
+        const savedTheme = localStorage.getItem('rugradar-theme');
+        if (savedTheme) {
+            setIsDarkTheme(savedTheme === 'dark');
+        }
+    }, []);
+
+    useEffect(() => {
+        localStorage.setItem('rugradar-theme', isDarkTheme ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-theme', isDarkTheme ? 'dark' : 'light');
+    }, [isDarkTheme]);
+
+    const toggleTheme = () => {
+        setIsDarkTheme(!isDarkTheme);
+    };
 
    
     const handleAnalyze = async () => {
@@ -252,10 +269,19 @@ function App() {
             <main className="main-content">
               
                 <div className="header">
-                    <div className="badge">
-                         Blockchain Security Platform
+                    <div className="header-controls">
+                        <div className="badge">
+                             Blockchain Security Platform
+                        </div>
+                        <button 
+                            className="theme-toggle"
+                            onClick={toggleTheme}
+                            title={`Switch to ${isDarkTheme ? 'light' : 'dark'} theme`}
+                        >
+                            {isDarkTheme ? '☀️' : '🌙'}
+                        </button>
                     </div>
-                    <h1 className="title"><span style={{color: '#ef4444'}}>Rug</span>Radar</h1>
+                    <h1 className="title" data-text="RugRadar"><span style={{color: '#ef4444'}}>Rug</span>Radar</h1>
                     <p className="subtitle">
                         Detect Rug Pulls Before They Happen
                         <span className="subtitle-detail">AI-powered scam detection • Protect your crypto investments</span>

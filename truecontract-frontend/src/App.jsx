@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import './App.css';
+import ContractComparison from './components/ContractComparison';
 
 
 const API_BASE_URL = 'http://localhost:3000/api/analyze';
@@ -169,6 +170,24 @@ function App() {
     const [analysisResult, setAnalysisResult] = useState(null);
     const [reviewRating, setReviewRating] = useState(0);
     const [reviewComment, setReviewComment] = useState('');
+    const [isDarkTheme, setIsDarkTheme] = useState(false);
+    const [activeTab, setActiveTab] = useState('analyze'); 
+
+    useEffect(() => {
+        const savedTheme = localStorage.getItem('rugradar-theme');
+        if (savedTheme) {
+            setIsDarkTheme(savedTheme === 'dark');
+        }
+    }, []);
+
+    useEffect(() => {
+        localStorage.setItem('rugradar-theme', isDarkTheme ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-theme', isDarkTheme ? 'dark' : 'light');
+    }, [isDarkTheme]);
+
+    const toggleTheme = () => {
+        setIsDarkTheme(!isDarkTheme);
+    };
 
    
     const handleAnalyze = async () => {
@@ -252,58 +271,90 @@ function App() {
             <main className="main-content">
               
                 <div className="header">
-                    <div className="badge">
-                         Blockchain Security Platform
+                    <div className="header-controls">
+                        <div className="badge">
+                             Blockchain Security Platform
+                        </div>
+                        <button 
+                            className="theme-toggle"
+                            onClick={toggleTheme}
+                            title={`Switch to ${isDarkTheme ? 'light' : 'dark'} theme`}
+                        >
+                            {isDarkTheme ? '☀️' : '🌙'}
+                        </button>
                     </div>
-                    <h1 className="title"><span style={{color: '#ef4444'}}>Rug</span>Radar</h1>
+                    <h1 className="title" data-text="RugRadar"><span style={{color: '#ef4444'}}>Rug</span>Radar</h1>
                     <p className="subtitle">
                         Detect Rug Pulls Before They Happen
                         <span className="subtitle-detail">AI-powered scam detection • Protect your crypto investments</span>
                     </p>
-                </div>
-
-                <div className="input-card">
-                    <label className="input-label">
-                        Contract Address
-                    </label>
-                    <div className="input-group">
-                        <input
-                            type="text"
-                            value={contractAddress}
-                            onChange={(e) => setContractAddress(e.target.value)}
-                            placeholder="0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb"
-                            className="input-field"
-                            disabled={isLoading}
-                            onKeyDown={(e) => e.key === 'Enter' && handleAnalyze()}
-                        />
-                        <button
-                            onClick={handleAnalyze}
-                            disabled={isLoading}
-                            className="analyze-button"
+                    
+                    <div className="nav-tabs">
+                        <button 
+                            className={`nav-tab ${activeTab === 'analyze' ? 'active' : ''}`}
+                            onClick={() => setActiveTab('analyze')}
                         >
-                            {isLoading ? (
-                                <>
-                                    <LoadingSpinner />
-                                    <span>Analyzing...</span>
-                                </>
-                            ) : (
-                                <span>Analyze</span>
-                            )}
+                            🔍 Single Analysis
+                        </button>
+                        <button 
+                            className={`nav-tab ${activeTab === 'compare' ? 'active' : ''}`}
+                            onClick={() => setActiveTab('compare')}
+                        >
+                            📊 Compare Contracts
                         </button>
                     </div>
-                    <p className="input-hint">
-                        Enter a valid Base blockchain contract address to begin security analysis
-                    </p>
                 </div>
 
-                {error && (
+                {activeTab === 'analyze' && (
+                    <>
+                        <div className="input-card">
+                            <label className="input-label">
+                                Contract Address
+                            </label>
+                            <div className="input-group">
+                                <input
+                                    type="text"
+                                    value={contractAddress}
+                                    onChange={(e) => setContractAddress(e.target.value)}
+                                    placeholder="0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb"
+                                    className="input-field"
+                                    disabled={isLoading}
+                                    onKeyDown={(e) => e.key === 'Enter' && handleAnalyze()}
+                                />
+                                <button
+                                    onClick={handleAnalyze}
+                                    disabled={isLoading}
+                                    className="analyze-button"
+                                >
+                                    {isLoading ? (
+                                        <>
+                                            <LoadingSpinner />
+                                            <span>Analyzing...</span>
+                                        </>
+                                    ) : (
+                                        <span>Analyze</span>
+                                    )}
+                                </button>
+                            </div>
+                            <p className="input-hint">
+                                Enter a valid Base blockchain contract address to begin security analysis
+                            </p>
+                        </div>
+                    </>
+                )}
+
+                {activeTab === 'compare' && (
+                    <ContractComparison />
+                )}
+
+                {activeTab === 'analyze' && error && (
                     <div className="error-card">
                         <h4>Analysis Error</h4>
                         <p>{error}</p>
                     </div>
                 )}
 
-                {analysisResult && (
+                {activeTab === 'analyze' && analysisResult && (
                     <div className="results-section">
                         <RugMeter rugScore={analysisResult.rugPullScore || analysisResult.riskAssessment?.overallRiskScore || 0} />
 

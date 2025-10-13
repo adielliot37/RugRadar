@@ -164,16 +164,44 @@ const RugMeter = ({ rugScore }) => {
 function App() {
    
     const [contractAddress, setContractAddress] = useState('');
+    const [selectedNetwork, setSelectedNetwork] = useState('base');
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(null);
     const [analysisResult, setAnalysisResult] = useState(null);
     const [reviewRating, setReviewRating] = useState(0);
     const [reviewComment, setReviewComment] = useState('');
 
-   
+    // Address validation helper functions
+    const validateAddress = (address, network) => {
+        if (!address) {
+            return { valid: false, message: 'Please enter an address.' };
+        }
+        
+        if (network === 'solana') {
+            // Solana addresses are base58 encoded, typically 32-44 characters
+            if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(address)) {
+                return { 
+                    valid: false, 
+                    message: 'Please enter a valid Solana address (base58 format).' 
+                };
+            }
+        } else {
+            // Base/Ethereum addresses
+            if (!/^0x[a-fA-F0-9]{40}$/.test(address)) {
+                return { 
+                    valid: false, 
+                    message: 'Please enter a valid Base contract address (0x format).' 
+                };
+            }
+        }
+        
+        return { valid: true };
+    };
+
     const handleAnalyze = async () => {
-        if (!contractAddress || !/^0x[a-fA-F0-9]{40}$/.test(contractAddress)) {
-            setError('Please enter a valid Ethereum-style address.');
+        const validation = validateAddress(contractAddress, selectedNetwork);
+        if (!validation.valid) {
+            setError(validation.message);
             return;
         }
 
@@ -185,7 +213,10 @@ function App() {
             const response = await fetch(`${API_BASE_URL}/`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ contractAddress }),
+                body: JSON.stringify({ 
+                    contractAddress, 
+                    chain: selectedNetwork 
+                }),
             });
 
             const data = await response.json();
@@ -214,6 +245,7 @@ function App() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     contractAddress: analysisResult.contractAddress,
+                    chain: analysisResult.network || analysisResult.chain || selectedNetwork,
                     rating: reviewRating,
                     comment: reviewComment,
                 }),
@@ -263,15 +295,50 @@ function App() {
                 </div>
 
                 <div className="input-card">
+                    <div className="network-selector">
+                        <label className="input-label">Blockchain Network</label>
+                        <div className="network-buttons">
+                            <button 
+                                className={`network-button ${selectedNetwork === 'base' ? 'active' : ''}`}
+                                onClick={() => {
+                                    setSelectedNetwork('base');
+                                    setContractAddress('');
+                                    setError(null);
+                                    setAnalysisResult(null);
+                                }}
+                                disabled={isLoading}
+                            >
+                                <span className="network-icon">🔵</span>
+                                Base
+                            </button>
+                            <button 
+                                className={`network-button ${selectedNetwork === 'solana' ? 'active' : ''}`}
+                                onClick={() => {
+                                    setSelectedNetwork('solana');
+                                    setContractAddress('');
+                                    setError(null);
+                                    setAnalysisResult(null);
+                                }}
+                                disabled={isLoading}
+                            >
+                                <span className="network-icon">🟣</span>
+                                Solana
+                            </button>
+                        </div>
+                    </div>
+                    
                     <label className="input-label">
-                        Contract Address
+                        {selectedNetwork === 'solana' ? 'Program/Token Address' : 'Contract Address'}
                     </label>
                     <div className="input-group">
                         <input
                             type="text"
                             value={contractAddress}
                             onChange={(e) => setContractAddress(e.target.value)}
-                            placeholder="0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb"
+                            placeholder={selectedNetwork === 'solana' ? 
+                                'So11111111111111111111111111111111111111112' : 
+                                '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb'
+                            }
                             className="input-field"
                             disabled={isLoading}
                             onKeyDown={(e) => e.key === 'Enter' && handleAnalyze()}
@@ -292,7 +359,12 @@ function App() {
                         </button>
                     </div>
                     <p className="input-hint">
-                        Enter a valid Base blockchain contract address to begin security analysis
+                        Enter a valid {selectedNetwork === 'solana' ? 'Solana program or token address' : 'Base contract address'} to begin security analysis
+                        {selectedNetwork === 'solana' && (
+                            <span className="hint-detail">
+                                <br />Supports: SPL tokens, memecoins, DeFi protocols, NFTs
+                            </span>
+                        )}
                     </p>
                 </div>
 
@@ -310,8 +382,14 @@ function App() {
                         <div className="summary-card">
                             <div className="contract-type-badges">
                                 <div className="contract-type-badge">
-                                    📋 {analysisResult.aiAnalysis.contractType}
+                                    {(analysisResult.network || analysisResult.chain) === 'solana' ? '🟣' : '🔵'}
+                                    {analysisResult.contractType || analysisResult.aiAnalysis?.contractType}
                                 </div>
+                                {analysisResult.isWellKnownProtocol && (
+                                    <div className="protocol-badge">
+                                        ✅ {analysisResult.protocolName}
+                                    </div>
+                                )}
                                 {analysisResult.cached && (
                                     <div className="cached-badge">
                                         ⚡ Cached Audit
@@ -319,9 +397,16 @@ function App() {
                                 )}
                             </div>
 
-                            <div className={`score-badge ${getScoreClass(analysisResult.aiAnalysis.securityScore)}`}>
-                                <span className="score-number">{analysisResult.aiAnalysis.securityScore}</span>
-                                <span className="score-label">Security Score</span>
+                            <div className={`score-badge ${getScoreClass(
+                                analysisResult.aiAnalysis?.securityScore || 
+                                analysisResult.riskAssessment?.trustScore || 50
+                            )}`}>
+                                <span className="score-number">
+                                    {analysisResult.aiAnalysis?.securityScore || analysisResult.riskAssessment?.trustScore || 50}
+                                </span>
+                                <span className="score-label">
+                                    {(analysisResult.network || analysisResult.chain) === 'solana' ? 'Trust Score' : 'Security Score'}
+                                </span>
                             </div>
 
                             <div className="contract-details">
@@ -331,40 +416,77 @@ function App() {
                                     <div className="on-chain-stats">
                                         <div className="stat-item">
                                             <span className="stat-label">💰 Balance</span>
-                                            <span className="stat-value">{parseFloat(analysisResult.onChainData.balance).toFixed(4)} ETH</span>
+                                            <span className="stat-value">
+                                                {parseFloat(analysisResult.onChainData.balance).toFixed(4)} 
+                                                {(analysisResult.network || analysisResult.chain) === 'solana' ? ' SOL' : ' ETH'}
+                                            </span>
                                         </div>
                                         <div className="stat-item">
-                                            <span className="stat-label">📊 Total Txns</span>
+                                            <span className="stat-label">📈 Total Txns</span>
                                             <span className="stat-value">{analysisResult.onChainData.totalTransactions}</span>
                                         </div>
                                         <div className="stat-item">
                                             <span className="stat-label">👥 Unique Users</span>
-                                            <span className="stat-value">{analysisResult.onChainData.transactionAnalysis?.uniqueInteractors || 0}</span>
+                                            <span className="stat-value">
+                                                {analysisResult.onChainData.transactionAnalysis?.uniqueInteractors || 
+                                                 analysisResult.onChainData.transactionAnalysis?.uniqueSigners || 0}
+                                            </span>
                                         </div>
                                         <div className="stat-item">
                                             <span className="stat-label">📈 Activity</span>
                                             <span className="stat-value">{analysisResult.onChainData.transactionAnalysis?.activity || 'Unknown'}</span>
                                         </div>
+                                        
+                                        {/* Show Solana-specific token info if available */}
+                                        {analysisResult.tokenInfo && (
+                                            <div className="stat-item">
+                                                <span className="stat-label">🪙 Token Supply</span>
+                                                <span className="stat-value">
+                                                    {parseFloat(analysisResult.tokenInfo.supply?.uiAmountString || '0').toLocaleString()}
+                                                </span>
+                                            </div>
+                                        )}
                                     </div>
                                 )}
 
                                 <div className="summary-box">
                                     <h3>Summary</h3>
-                                    <p>{analysisResult.aiAnalysis.summary}</p>
+                                    <p>
+                                        {analysisResult.aiAnalysis?.summary || 
+                                         analysisResult.riskAssessment?.summary || 
+                                         'Analysis completed successfully.'}
+                                    </p>
                                 </div>
 
-                                <div className={`verdict-box ${getVerdictClass(analysisResult.aiAnalysis.overallVerdict)}`}>
+                                <div className={`verdict-box ${getVerdictClass(
+                                    analysisResult.aiAnalysis?.overallVerdict || 
+                                    analysisResult.riskAssessment?.summary || 'Analysis complete'
+                                )}`}>
                                     <span className="verdict-label">Verdict</span>
-                                    <p className="verdict-text">{analysisResult.aiAnalysis.overallVerdict}</p>
+                                    <p className="verdict-text">
+                                        {analysisResult.aiAnalysis?.overallVerdict || 
+                                         analysisResult.riskAssessment?.summary || 
+                                         'Analysis completed - check details above'}
+                                    </p>
                                 </div>
                             </div>
                         </div>
 
                         <div className="vulnerabilities-card">
-                            <h3 className="section-title">Vulnerability Analysis</h3>
+                            <h3 className="section-title">
+                                {(analysisResult.network || analysisResult.chain) === 'solana' ? 'Risk Analysis' : 'Vulnerability Analysis'}
+                            </h3>
 
                             <div className="vulnerabilities-grid">
-                                {analysisResult.aiAnalysis.vulnerabilities.map((vuln, index) => (
+                                {/* Handle both Base (aiAnalysis.vulnerabilities) and Solana (riskAssessment.risks) formats */}
+                                {(analysisResult.aiAnalysis?.vulnerabilities || 
+                                  analysisResult.riskAssessment?.risks?.map(risk => ({
+                                      name: risk.category,
+                                      detected: true,
+                                      severity: risk.severity,
+                                      details: risk.details || risk.impact
+                                  })) || []
+                                ).map((vuln, index) => (
                                     <div
                                         key={index}
                                         className={`vulnerability-item ${vuln.detected ? 'detected' : 'safe'}`}
@@ -378,11 +500,23 @@ function App() {
                                                 {vuln.detected && <span className="alert-badge">ALERT</span>}
                                             </h4>
                                             <p className="vuln-details">
-                                                {vuln.detected ? vuln.details : 'No issues detected. This contract appears safe from this vulnerability.'}
+                                                {vuln.detected ? vuln.details : 'No issues detected. This appears safe from this vulnerability.'}
                                             </p>
                                         </div>
                                     </div>
                                 ))}
+                                
+                                {/* Show message if no vulnerabilities/risks found */}
+                                {(!analysisResult.aiAnalysis?.vulnerabilities || analysisResult.aiAnalysis.vulnerabilities.length === 0) &&
+                                 (!analysisResult.riskAssessment?.risks || analysisResult.riskAssessment.risks.length === 0) && (
+                                    <div className="vulnerability-item safe">
+                                        <div className="vuln-icon success">✓</div>
+                                        <div className="vuln-content">
+                                            <h4 className="vuln-name">All Clear</h4>
+                                            <p className="vuln-details">No significant risks detected in this analysis.</p>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </div>
 
@@ -462,6 +596,8 @@ function App() {
                         <span className="powered-by-item">Storacha</span>
                         <span>•</span>
                         <span className="powered-by-item">Base</span>
+                        <span>•</span>
+                        <span className="powered-by-item">Solana</span>
                         <span>•</span>
                         <span className="powered-by-item">AI</span>
                     </div>

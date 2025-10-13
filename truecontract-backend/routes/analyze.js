@@ -1,19 +1,37 @@
 const express = require('express');
 const router = express.Router();
-const { performComprehensiveAnalysis, getOnChainData } = require('../services/analysisService');
+const { performUnifiedAnalysis, getMultiChainOnChainData } = require('../services/analysisService');
 const { uploadAnalysis, retrieveAnalysis } = require('../services/storachaService');
 
 const contractIndex = {};
 
 router.post('/', async (req, res) => {
-    const { contractAddress, forceRefresh } = req.body;
-    const chain = 'base';
+    const { contractAddress, forceRefresh, chain = 'base' } = req.body;
+    const network = (chain || 'base').toLowerCase();
 
-    if (!contractAddress || !/^0x[a-fA-F0-9]{40}$/.test(contractAddress)) {
-        return res.status(400).json({ error: 'A valid contract address is required.' });
+    // Address validation based on network
+    if (!contractAddress) {
+        return res.status(400).json({ error: 'Contract/Program address is required.' });
     }
 
-    const indexKey = `${chain}-${contractAddress}`;
+    // Validate address format based on network
+    if (network === 'solana') {
+        // Solana addresses are base58 encoded and typically 32-44 characters
+        if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(contractAddress)) {
+            return res.status(400).json({ 
+                error: 'Invalid Solana program address format. Please provide a valid base58 address.' 
+            });
+        }
+    } else {
+        // Base/Ethereum addresses
+        if (!/^0x[a-fA-F0-9]{40}$/.test(contractAddress)) {
+            return res.status(400).json({ 
+                error: 'Invalid Base contract address format. Please provide a valid hex address.' 
+            });
+        }
+    }
+
+    const indexKey = `${network}-${contractAddress}`;
 
     try {
         const existingCid = contractIndex[indexKey];
@@ -24,9 +42,9 @@ router.post('/', async (req, res) => {
             staticAuditData = await retrieveAnalysis(filepath);
 
             if (staticAuditData) {
-                console.log(`✅ Found cached audit for ${contractAddress}. Refreshing on-chain data...`);
+                console.log(`✅ Found cached audit for ${contractAddress} on ${network}. Refreshing on-chain data...`);
 
-                const freshOnChainData = await getOnChainData(contractAddress);
+                const freshOnChainData = await getMultiChainOnChainData(contractAddress, network);
 
                 const combinedData = {
                     ...staticAuditData,
@@ -34,28 +52,43 @@ router.post('/', async (req, res) => {
                     rugPullScore: staticAuditData.rugPullScore,
                     cached: true,
                     cacheTimestamp: staticAuditData.lastAnalyzed,
-                    lastOnChainUpdate: new Date().toISOString()
+                    lastOnChainUpdate: new Date().toISOString(),
+                    network
                 };
 
                 return res.json(combinedData);
             }
         }
 
-        console.log(`🔍 Performing full analysis for ${contractAddress}...`);
-        const analysisResult = await performComprehensiveAnalysis(contractAddress);
+        console.log(`🔍 Performing full analysis for ${contractAddress} on ${network}...`);
+        const analysisResult = await performUnifiedAnalysis(contractAddress, network);
 
+        // Prepare analysis data with network-specific formatting
         const analysisData = {
             contractAddress,
-            chain,
-            contractMetadata: analysisResult.contractMetadata,
-            aiAnalysis: analysisResult.aiAnalysis,
-            riskAssessment: analysisResult.riskAssessment,
+            chain: network,
+            network,
+            contractType: analysisResult.contractType,
+            isWellKnownProtocol: analysisResult.isWellKnownProtocol,
+            protocolName: analysisResult.protocolName,
             rugPullScore: analysisResult.rugPullScore,
+            riskAssessment: analysisResult.riskAssessment,
             onChainData: analysisResult.onChainData,
+            // Network-specific metadata
+            ...(network === 'solana' ? {
+                programMetadata: analysisResult.programMetadata,
+                tokenInfo: analysisResult.tokenInfo,
+                solanaAnalysis: analysisResult.solanaAnalysis
+            } : {
+                contractMetadata: analysisResult.contractMetadata,
+                aiAnalysis: analysisResult.aiAnalysis
+            }),
             userReviews: [],
             lastAnalyzed: analysisResult.lastAnalyzed,
-            lastOnChainUpdate: analysisResult.lastAnalyzed,
-            cached: false
+            lastOnChainUpdate: analysisResult.lastAnalyzed || new Date().toISOString(),
+            cached: false,
+            analysisVersion: '2.0',
+            supportedChains: ['base', 'solana']
         };
 
         try {
@@ -70,24 +103,30 @@ router.post('/', async (req, res) => {
         res.status(201).json(analysisData);
 
     } catch (error) {
-        console.error('Analysis error:', error);
+        console.error(`Analysis error for ${network}:`, error);
+        
+        const networkSpecificHint = network === 'solana' 
+            ? 'Make sure the program address is valid and exists on Solana mainnet'
+            : 'Make sure the contract is verified on BaseScan';
+        
         res.status(500).json({
-            error: 'Failed to analyze contract.',
+            error: `Failed to analyze ${network === 'solana' ? 'program' : 'contract'}.`,
             details: error.message,
-            hint: 'Make sure the contract is verified on BaseScan'
+            network,
+            hint: networkSpecificHint
         });
     }
 });
 
 router.post('/review', async (req, res) => {
-    const { contractAddress, rating, comment } = req.body;
-    const chain = 'base';
+    const { contractAddress, rating, comment, chain = 'base' } = req.body;
+    const network = (chain || 'base').toLowerCase();
 
     if (!contractAddress || !rating) {
         return res.status(400).json({ error: 'contractAddress and rating are required.' });
     }
 
-    const indexKey = `${chain}-${contractAddress}`;
+    const indexKey = `${network}-${contractAddress}`;
     const existingCid = contractIndex[indexKey];
 
     if (!existingCid) {

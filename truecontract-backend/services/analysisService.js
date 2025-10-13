@@ -1,5 +1,6 @@
 const { getContractData, getContractTransactions, getContractBalance } = require('./blockchainService');
 const { analyzeContractWithAI, analyzeContractABI, performStaticAnalysis } = require('./aiService');
+const { performComprehensiveSolanaAnalysis, getSolanaOnChainData } = require('./solanaAnalysisService');
 
 const getOnChainData = async (contractAddress) => {
     console.log(`Fetching fresh on-chain data for ${contractAddress}...`);
@@ -321,10 +322,52 @@ const generateRiskSummary = (riskLevel, criticalVulns, highVulns, totalRisks) =>
     return 'This contract appears to follow security best practices, but users should always do their own research.';
 };
 
+// Multi-chain analysis function that routes to appropriate blockchain
+const performMultiChainAnalysis = async (address, network = 'base') => {
+    console.log(`Starting multi-chain analysis for ${address} on ${network}...`);
+
+    if (network.toLowerCase() === 'solana') {
+        return await performComprehensiveSolanaAnalysis(address);
+    } else {
+        // Default to Base analysis
+        return await performComprehensiveAnalysis(address);
+    }
+};
+
+// Multi-chain on-chain data fetcher
+const getMultiChainOnChainData = async (address, network = 'base') => {
+    console.log(`Fetching multi-chain on-chain data for ${address} on ${network}...`);
+
+    if (network.toLowerCase() === 'solana') {
+        return await getSolanaOnChainData(address);
+    } else {
+        // Default to Base
+        return await getOnChainData(address);
+    }
+};
+
+// Unified analysis function that returns consistent format across chains
+const performUnifiedAnalysis = async (address, network = 'base') => {
+    const result = await performMultiChainAnalysis(address, network);
+    
+    // Ensure consistent response format
+    return {
+        ...result,
+        network: network.toLowerCase(),
+        analysisVersion: '2.0',
+        supportedChains: ['base', 'solana'],
+        timestamp: new Date().toISOString()
+    };
+};
+
 module.exports = {
     performComprehensiveAnalysis,
     getOnChainData,
     analyzeTransactionPatterns,
     calculateRiskAssessment,
-    calculateRugPullScore
+    calculateRugPullScore,
+    // New multi-chain functions
+    performMultiChainAnalysis,
+    getMultiChainOnChainData,
+    performUnifiedAnalysis
 };

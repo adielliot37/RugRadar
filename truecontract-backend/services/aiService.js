@@ -1,8 +1,12 @@
 const axios = require('axios');
 
-const analyzeContractWithAI = async (contractData) => {
+const analyzeContractWithAI = async (contractData, network = 'base') => {
     const sourceCode = typeof contractData === 'string' ? contractData : contractData.sourceCode;
     const metadata = typeof contractData === 'object' ? contractData : {};
+
+    if (network === 'solana') {
+        return analyzeSolanaProgram(contractData, metadata);
+    }
 
     const prompt = `
         As an expert smart contract security auditor, perform a comprehensive security analysis of this Solidity contract from the Base blockchain.
@@ -167,8 +171,194 @@ const extractSolidityVersion = (code) => {
     return versionMatch ? versionMatch[1].trim() : 'Unknown';
 };
 
+const analyzeSolanaProgram = async (programData, metadata) => {
+    const isToken = programData.isToken || false;
+    const tokenInfo = programData.tokenInfo || null;
+    const programType = programData.programType || 'Unknown';
+    const tokenAnalysis = programData.tokenAnalysis || null;
+    
+    let prompt;
+    
+    if (isToken && tokenInfo) {
+        // Token-specific analysis prompt
+        const supply = parseFloat(tokenInfo.supply?.uiAmountString || '0');
+        const isMemecoin = supply > 1000000000;
+        
+        prompt = `
+        As an expert Solana token security analyst, perform a comprehensive analysis of this SPL token.
+        
+        TOKEN INFORMATION:
+        - Mint Address: ${programData.programAddress || programData.programId}
+        - Token Type: ${programData.contractType || classifyTokenType(tokenInfo)}
+        - Total Supply: ${supply.toLocaleString()} tokens
+        - Decimals: ${tokenInfo.decimals}
+        - Mint Authority: ${tokenInfo.mintAuthority ? 'Present (RISK)' : 'Revoked (Safe)'}
+        - Freeze Authority: ${tokenInfo.freezeAuthority ? 'Present (RISK)' : 'Revoked (Safe)'}
+        - Is Memecoin: ${isMemecoin ? 'Yes' : 'No'}
+        - Top Holder Concentration: ${tokenAnalysis?.concentration?.toFixed(1) || 'Unknown'}%
+        
+        ${tokenInfo.largestHolders && tokenInfo.largestHolders.length > 0 ? 
+            `TOP HOLDERS:
+${tokenInfo.largestHolders.slice(0, 5).map((holder, i) => 
+    `${i + 1}. ${holder.address}: ${parseFloat(holder.uiAmountString || '0').toLocaleString()} tokens (${((parseFloat(holder.uiAmountString || '0') / supply) * 100).toFixed(2)}%)`
+).join('\n')}` : ''}
+        
+        Provide your response as a single, minified JSON object without any markdown formatting.
+        
+        The JSON object must have this exact structure:
+        {
+          "summary": "A detailed 2-3 sentence summary of the token's purpose, supply characteristics, and key risk factors.",
+          "contractType": "Specific token classification: 'Memecoin', 'Utility Token', 'LP Token', 'NFT Mint', etc.",
+          "isWellKnownProtocol": false,
+          "protocolName": null,
+          "securityScore": "An integer from 0 (critical risk) to 100 (extremely safe), based on authority analysis and distribution.",
+          "complexityScore": "An integer from 0 (simple) to 100 (very complex) - most SPL tokens are simple (10-30).",
+          "gasOptimization": "Score from 0-100 based on Solana efficiency (most SPL tokens score 80-95).",
+          "codeQuality": "Score from 0-100 based on standard SPL implementation (usually 70-90).",
+          "vulnerabilities": [
+            { "name": "Unlimited Mint Authority", "detected": ${!!tokenInfo.mintAuthority}, "severity": "high", "details": "${tokenInfo.mintAuthority ? 'Token supply can be inflated by mint authority' : 'Mint authority has been revoked - supply is fixed'}" },
+            { "name": "Freeze Authority Active", "detected": ${!!tokenInfo.freezeAuthority}, "severity": "high", "details": "${tokenInfo.freezeAuthority ? 'Token accounts can be frozen by freeze authority' : 'Freeze authority has been revoked - accounts cannot be frozen'}" },
+            { "name": "High Concentration Risk", "detected": ${(tokenAnalysis?.concentration || 0) > 30}, "severity": "${(tokenAnalysis?.concentration || 0) > 50 ? 'critical' : 'medium'}", "details": "Top holder owns ${tokenAnalysis?.concentration?.toFixed(1) || '0'}% of total supply" },
+            { "name": "Memecoin Volatility Risk", "detected": ${isMemecoin}, "severity": "medium", "details": "${isMemecoin ? 'High supply memecoin with speculative nature and extreme volatility risk' : 'Not classified as a memecoin'}" },
+            { "name": "Low Liquidity Risk", "detected": ${tokenAnalysis?.risks?.some(r => r.type === 'low_recent_activity') || false}, "severity": "low", "details": "Limited recent trading activity may indicate low liquidity" }
+          ],
+          "bestPractices": {
+            "mintAuthorityRevoked": ${!tokenInfo.mintAuthority},
+            "freezeAuthorityRevoked": ${!tokenInfo.freezeAuthority},
+            "hasMetadata": ${!!programData.metadata},
+            "reasonableSupply": ${supply > 0 && supply < 1e15},
+            "activeTrading": ${tokenAnalysis?.risks?.some(r => r.type !== 'low_recent_activity') !== false}
+          },
+          "tokenSpecificIssues": [
+            ${tokenInfo.mintAuthority ? '"Mint authority present - supply can be inflated"' : ''}
+            ${tokenInfo.freezeAuthority ? '"Freeze authority present - accounts can be frozen"' : ''}
+            ${(tokenAnalysis?.concentration || 0) > 50 ? '"Extremely high token concentration - rug pull risk"' : ''}
+            ${isMemecoin ? '"High-risk memecoin - extreme volatility expected"' : ''}
+          ].filter(Boolean),
+          "recommendations": [
+            ${tokenInfo.mintAuthority || tokenInfo.freezeAuthority ? '"Verify if authorities are truly needed or consider revoking them"' : '"Good: Both mint and freeze authorities are properly revoked"'},
+            ${(tokenAnalysis?.concentration || 0) > 30 ? '"Monitor large holder movements closely"' : '"Token distribution appears reasonable"'},
+            ${isMemecoin ? '"Exercise extreme caution - this is a speculative memecoin"' : '"Standard token safety practices apply"'},
+            "Always verify token authenticity and do your own research",
+            "Check for official project social media and documentation"
+          ],
+          "overallVerdict": "${(tokenAnalysis?.riskScore || 50) > 70 ? 'High risk detected' : (tokenAnalysis?.riskScore || 50) > 50 ? 'Proceed with caution' : (tokenAnalysis?.riskScore || 50) > 30 ? 'Moderate risk - research thoroughly' : 'Standard token risks apply'}",
+          "auditPriority": "${(tokenAnalysis?.riskScore || 50) > 70 ? 'high' : (tokenAnalysis?.riskScore || 50) > 40 ? 'medium' : 'low'} - ${isMemecoin ? 'Memecoin classification increases risk' : 'Standard SPL token'}"
+        }`;
+    } else {
+        // General Solana program analysis
+        prompt = `
+        As an expert Solana program security analyst, analyze this Solana program.
+        
+        PROGRAM INFORMATION:
+        - Program Address: ${programData.programAddress || programData.programId}
+        - Program Type: ${programType}
+        - Is Executable: ${programData.accountInfo?.executable ? 'Yes' : 'No'}
+        - Owner Program: ${programData.accountInfo?.owner || 'Unknown'}
+        - Account Data Length: ${programData.accountInfo?.data?.length || 0} bytes
+        
+        Provide your response as a single, minified JSON object without any markdown formatting.
+        
+        The JSON object must have this exact structure:
+        {
+          "summary": "A detailed 2-3 sentence summary of what this Solana program does and its risk level.",
+          "contractType": "${programType === 'UNKNOWN' ? 'Unknown Solana Program' : programType.replace(/_/g, ' ')}",
+          "isWellKnownProtocol": ${['SPL_TOKEN_PROGRAM', 'TOKEN_2022_PROGRAM', 'RAYDIUM_AMM', 'JUPITER_AGGREGATOR', 'ORCA_DEX'].includes(programType)},
+          "protocolName": ${programType === 'RAYDIUM_AMM' ? '"Raydium"' : programType === 'JUPITER_AGGREGATOR' ? '"Jupiter"' : programType === 'ORCA_DEX' ? '"Orca"' : 'null'},
+          "securityScore": "${programType === 'UNKNOWN' ? '30' : ['SPL_TOKEN_PROGRAM', 'TOKEN_2022_PROGRAM'].includes(programType) ? '95' : '60'}",
+          "complexityScore": "${programType === 'UNKNOWN' ? '50' : programType.includes('TOKEN') ? '20' : '70'}",
+          "gasOptimization": "85",
+          "codeQuality": "${programType === 'UNKNOWN' ? '40' : '75'}",
+          "vulnerabilities": [
+            { "name": "Unknown Program Type", "detected": ${programType === 'UNKNOWN'}, "severity": "medium", "details": "${programType === 'UNKNOWN' ? 'Cannot determine program functionality and safety' : 'Program type identified successfully'}" },
+            { "name": "Unverified Program", "detected": ${!['SPL_TOKEN_PROGRAM', 'TOKEN_2022_PROGRAM', 'RAYDIUM_AMM', 'JUPITER_AGGREGATOR', 'ORCA_DEX'].includes(programType)}, "severity": "low", "details": "Program is not a well-known protocol - verify independently" }
+          ],
+          "bestPractices": {
+            "isWellKnownProgram": ${['SPL_TOKEN_PROGRAM', 'TOKEN_2022_PROGRAM', 'RAYDIUM_AMM', 'JUPITER_AGGREGATOR', 'ORCA_DEX'].includes(programType)},
+            "hasValidStructure": ${programData.accountInfo ? 'true' : 'false'}
+          },
+          "gasIssues": [],
+          "recommendations": [
+            "Verify program authenticity through official sources",
+            "Check program's transaction history and usage patterns",
+            "Research the program's purpose and documentation"
+          ],
+          "overallVerdict": "${programType === 'UNKNOWN' ? 'Unknown program - proceed with extreme caution' : ['SPL_TOKEN_PROGRAM', 'TOKEN_2022_PROGRAM', 'RAYDIUM_AMM', 'JUPITER_AGGREGATOR', 'ORCA_DEX'].includes(programType) ? 'Well-known protocol - generally safe' : 'Unverified program - research thoroughly'}",
+          "auditPriority": "${programType === 'UNKNOWN' ? 'high' : ['SPL_TOKEN_PROGRAM', 'TOKEN_2022_PROGRAM'].includes(programType) ? 'low' : 'medium'}"
+        }`;
+    }
+
+    try {
+        console.log(`Sending Solana ${isToken ? 'token' : 'program'} to OpenAI for analysis...`);
+        const response = await axios.post('https://api.openai.com/v1/chat/completions', {
+            model: 'gpt-4-turbo',
+            messages: [{ role: 'user', content: prompt }],
+            temperature: 0.1,
+            max_tokens: 2000
+        }, {
+            headers: { 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}` }
+        });
+
+        const result = response.data.choices[0].message.content;
+        console.log('Solana AI analysis received.');
+
+        const cleanedResult = result.replace(/```json|```/g, '').trim();
+        return JSON.parse(cleanedResult);
+    } catch (error) {
+        console.error('Error with OpenAI API for Solana:', error.response ? error.response.data : error.message);
+        
+        // Return fallback analysis for Solana
+        return {
+            summary: `This is a Solana ${isToken ? 'token' : 'program'} that requires manual verification.`,
+            contractType: isToken ? 'SPL Token' : 'Solana Program',
+            isWellKnownProtocol: false,
+            protocolName: null,
+            securityScore: 50,
+            complexityScore: 40,
+            gasOptimization: 85,
+            codeQuality: 60,
+            vulnerabilities: [
+                {
+                    name: 'Analysis Failed',
+                    detected: true,
+                    severity: 'medium',
+                    details: 'AI analysis could not be completed - manual review required'
+                }
+            ],
+            bestPractices: {
+                mintAuthorityRevoked: !tokenInfo?.mintAuthority,
+                freezeAuthorityRevoked: !tokenInfo?.freezeAuthority
+            },
+            tokenSpecificIssues: tokenInfo?.mintAuthority || tokenInfo?.freezeAuthority ? 
+                ['Authority controls present'] : [],
+            recommendations: [
+                'Manual security review required',
+                'Verify program/token through official sources',
+                'Check community feedback and usage patterns'
+            ],
+            overallVerdict: 'Analysis incomplete - manual verification needed',
+            auditPriority: 'medium'
+        };
+    }
+};
+
+const classifyTokenType = (tokenInfo) => {
+    if (!tokenInfo || !tokenInfo.supply) return 'Unknown Token';
+    
+    const supply = parseFloat(tokenInfo.supply.uiAmountString || '0');
+    const decimals = tokenInfo.decimals;
+    
+    if (supply === 0) return 'NFT Mint';
+    if (decimals === 0 && supply <= 10000) return 'NFT Collection';
+    if (supply >= 1000000000) return 'Memecoin';
+    if (supply <= 21000000 && decimals >= 6) return 'Utility Token';
+    
+    return 'SPL Token';
+};
+
 module.exports = {
     analyzeContractWithAI,
     analyzeContractABI,
-    performStaticAnalysis
+    performStaticAnalysis,
+    analyzeSolanaProgram
 };
